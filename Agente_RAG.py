@@ -5,13 +5,16 @@ from google import genai
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
+from langchain_chroma import Chroma
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 load_dotenv()
+
 
 api_key = os.getenv("GEMINI_API_KEY")
 os.environ["GEMINI_API_KEY"] = api_key
 
-client = genai.Client()
+client = genai.Client(api_key=api_key)
 
 def carregar_e_limpar_pdf(caminho_pdf: str) -> list[Document]:
     loader = PyPDFLoader(caminho_pdf)
@@ -62,6 +65,29 @@ def chunking_e_metadados(documentos_paginas: list[Document]) -> list[Document]:
         
     return chunks_finais
 
+def indexar_chunks_no_vectorstore(chunks: list[Document], pasta_db: str = "./chroma_db") -> Chroma:
+    """
+    Recebe os chunks com metadados, envia para o modelo de embedding e
+    armazena o vetor, o índice HNSW e os metadados no ChromaDB.
+    """
+    # Configura o modelo oficial de Embeddings da Google
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model="gemini-embedding-001",
+        google_api_key=api_key
+    )
+    
+    print(f"--> Gerando embeddings e indexando {len(chunks)} chunks no ChromaDB...")
+    
+    # Transforma o texto em vetores, constrói o índice HNSW e grava em disco
+    vectorstore = Chroma.from_documents(
+        documents=chunks,
+        embedding=embeddings,
+        persist_directory=pasta_db
+    )
+    
+    print(" Indexação concluída e salva no diretório local!")
+    return vectorstore
+
 if __name__ == "__main__":
     pdf_path = "./documentos/FAQ - Métodos de Pagamento.pdf"
     
@@ -69,3 +95,5 @@ if __name__ == "__main__":
     
     # Executa Chunking e a Atribuição dos Metadados
     chunks_prontos = chunking_e_metadados(docs_paginas)
+    # Indexação Vetorial (Envio ao embedding + Gravando no VectorDB)
+    vectorstore = indexar_chunks_no_vectorstore(chunks_prontos)

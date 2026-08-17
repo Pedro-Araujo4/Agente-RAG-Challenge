@@ -36,6 +36,9 @@ MANIFEST
 *.manifest
 *.spec
 
+# Banco de dados Vetorial
+chroma_db/
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt

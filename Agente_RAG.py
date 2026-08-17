@@ -1,6 +1,6 @@
 import os
+import streamlit as st
 from dotenv import load_dotenv
-from google import genai
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
@@ -12,8 +12,13 @@ load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
 os.environ["GEMINI_API_KEY"] = api_key
 
-reranker_model = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+st.set_page_config(page_title="Assistente de IA Corporativo", page_icon="🤖", layout="centered")
 
+@st.cache_resource
+def carregar_reranker():
+    return CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+
+reranker_model = carregar_reranker()
 
 def carregar_e_preparar_chunks(caminho_pdf: str) -> list[Document]:
     """Carrega o PDF, limpa o texto e divide em chunks com metadados enriquecidos."""
@@ -40,14 +45,19 @@ def carregar_e_preparar_chunks(caminho_pdf: str) -> list[Document]:
         
     return chunks
 
-def criar_vectorstore(chunks: list[Document], pasta_db: str = "./chroma_db") -> Chroma:
-    """Gera embeddings e persiste os vetores no ChromaDB."""
+@st.cache_resource
+def obter_ou_criar_vectorstore(caminho_pdf: str, pasta_db: str = "./chroma_db") -> Chroma:
+    """Gera embeddings e persiste os vetores no ChromaDB se não existirem."""
     embeddings = GoogleGenerativeAIEmbeddings(
         model="gemini-embedding-001", 
         google_api_key=api_key
     )
+    
+    if os.path.exists(pasta_db) and os.listdir(pasta_db):
+        return Chroma(persist_directory=pasta_db, embedding_function=embeddings)
+        
+    chunks = carregar_e_preparar_chunks(caminho_pdf)
     return Chroma.from_documents(chunks, embeddings, persist_directory=pasta_db)
-
 
 def buscar_e_reranquear(
     vectorstore: Chroma, 
@@ -61,7 +71,6 @@ def buscar_e_reranquear(
     if not candidatos:
         return []
 
-    # Avalia os pares (query, conteúdo) e ordena pelo score
     scores = reranker_model.predict([[query, doc.page_content] for doc in candidatos])
     ranqueados = sorted(zip(candidatos, scores), key=lambda x: x[1], reverse=True)
     
@@ -75,10 +84,7 @@ def montar_contexto_rag(documentos: list[Document]) -> str:
     )
 
 def gerar_resposta_rag(query: str, contexto: str, documentos: list[Document]) -> str:
-    """
-    Prompt anti-alucinação, fallback dinâmico e resposta com fontes.
-    """
-    # Fallback imediato se a busca não tiver retornado nenhum documento confiável
+    """Prompt anti-alucinação, fallback dinâmico e resposta com fontes."""
     if not contexto or not documentos:
         return (
             "Não encontrei essa informação nos documentos disponíveis da nossa base de conhecimento.\n\n"
@@ -87,10 +93,9 @@ def gerar_resposta_rag(query: str, contexto: str, documentos: list[Document]) ->
     llm = ChatGoogleGenerativeAI(
         model="gemini-3.1-flash-lite",
         google_api_key=api_key,
-        temperature=0.0  # máxima fidelidade ao contexto, o que evita alucinações
+        temperature=0.0
     )
 
-    # Responder apenas com o contexto
     prompt = f"""Você é um assistente virtual corporativo especialista nos documentos da empresa.
 
 Sua tarefa é responder à pergunta do colaborador usando EXCLUSIVAMENTE as informações fornecidas no CONTEXTO abaixo.
@@ -110,23 +115,70 @@ RESPOSTA FORMATADA:"""
 
     resposta = llm.invoke(prompt)
 
-    return resposta.content
+    # Resposta completa
+    conteudo = resposta.content
 
-if __name__ == "__main__":
-    pdf_path = "./documentos/FAQ - Métodos de Pagamento.pdf"
-    
-    # Coleta/Processamento do conteúdo e indexação vetorial
-    chunks = carregar_e_preparar_chunks(pdf_path)
-    vectorstore = criar_vectorstore(chunks)
-    
-    # Exemplo de Pergunta
-    pergunta = "O que você pode me falar sobre o pagameplo por Pix?"
-    filtro = {"categoria": "Financeiro / Meios de Pagamento"}
-    
-    # Retrieval + Reranking + Montagem de Contexto + Geração de Resposta (Pipeline RAG)
-    resultados = buscar_e_reranquear(vectorstore, pergunta, top_k=8, top_n=3, filtro=filtro)
-    contexto = montar_contexto_rag(resultados)
-    resposta_final = gerar_resposta_rag(pergunta, contexto, resultados)
-    
-    print("\n================ RESPOSTA FINAL DO AGENTE ================\n")
-    print(resposta_final)
+    # Se o conteúdo for (dict/objeto)
+    if isinstance(conteudo, list):
+        textos = []
+        for bloco in conteudo:
+            if isinstance(bloco, dict) and "text" in bloco:
+                textos.append(bloco["text"])
+            elif isinstance(bloco, str):
+                textos.append(bloco)
+            elif hasattr(bloco, "text"):
+                textos.append(bloco.text)
+        return "\n".join(textos)
+
+    return str(conteudo)
+
+
+# INTERFACE WEB DO STREAMLIT
+
+st.title("🤖 Assistente Virtual Corporativo")
+st.caption("Agente de IA baseado na documentação oficial - Respostas com fontes rastreáveis")
+
+pdf_path = "./documentos/FAQ - Métodos de Pagamento.pdf"
+vectorstore = obter_ou_criar_vectorstore(pdf_path)
+filtro_padrao = {"categoria": "Financeiro / Meios de Pagamento"}
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+for idx, msg in enumerate(st.session_state.messages):
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
+        if "fontes" in msg and msg["fontes"]:
+            with st.expander("Documentos Consultados 📚 "):
+                for fonte in msg["fontes"]:
+                    st.write(f"- {fonte}")
+
+if prompt_usuario := st.chat_input("Digite sua pergunta sobre procedimentos ou métodos de pagamento..."):
+    st.session_state.messages.append({"role": "user", "content": prompt_usuario})
+    with st.chat_message("user"):
+        st.write(prompt_usuario)
+
+    with st.chat_message("assistant"):
+        with st.spinner("Consultando base de dados..."):
+            resultados = buscar_e_reranquear(vectorstore, prompt_usuario, top_k=8, top_n=3, filtro=filtro_padrao)
+            contexto = montar_contexto_rag(resultados)
+            resposta = gerar_resposta_rag(prompt_usuario, contexto, resultados)
+
+            fontes_unicas = list({
+                f"📄 {d.metadata.get('fonte')} (Página {d.metadata.get('pagina_origem')})"
+                for d in resultados
+            })
+
+            st.write(resposta)
+            if fontes_unicas:
+                with st.expander("📚 Documentos Consultados"):
+                    for f in fontes_unicas:
+                        st.write(f"- {f}")
+
+            col1, col2, _ = st.columns([1, 1, 8])
+            with col1:
+                st.button("👍", key=f"like_{len(st.session_state.messages)}")
+            with col2:
+                st.button("👎", key=f"dislike_{len(st.session_state.messages)}")
+
+    st.session_state.messages.append({"role": "assistant", "content": resposta, "fontes": fontes_unicas})

@@ -84,3 +84,27 @@ python -m streamlit run app.py
 
 ### Acesse a aplicação rodando ao vivo na Oracle Cloud Infrastructure:
 ### 👉 **[http://163.176.222.199:8501/](http://163.176.222.199:8501/)**
+
+## ❓ Exemplos de Perguntas que o Agente Responde
+### O assistente é capaz de responder a perguntas operacionais e de suporte com base no documento interno:
+
+#### "Me fale sobre o pagamento Pix."
+
+#### "Quais são os métodos de pagamento aceitos?"
+
+#### "Como funciona o parcelamento no cartão de crédito?"
+
+#### "Existe opção de transferência bancária?"
+
+## 💬 Exemplos de Respostas Geradas pelo Agente
+### Exemplo 1
+#### Pergunta: Me fale sobre o pagamento Pix
+
+#### Resposta: A BimBam Buy aceita transferência bancária/PIX como um dos métodos de pagamento disponíveis, sendo que a disponibilidade deste método pode variar conforme o país, a categoria e o valor da compra.
+
+#### Fonte: FAQ - Métodos de Pagamento.pdf | Pág: 2
+
+### Exemplo 2 (Tratamento de Fora de Escopo)
+#### Pergunta: Qual é a capital do Japão?
+
+#### Resposta: Não encontrei essa informação nos documentos fornecidos na base de conhecimento. Por favor, faça uma pergunta relacionada aos procedimentos ou métodos de pagamento.

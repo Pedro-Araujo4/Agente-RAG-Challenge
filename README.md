@@ -108,3 +108,6 @@ python -m streamlit run app.py
 #### Pergunta: Qual é a capital do Japão?
 
 #### Resposta: Não encontrei essa informação nos documentos fornecidos na base de conhecimento. Por favor, faça uma pergunta relacionada aos procedimentos ou métodos de pagamento.
+
+# Print de Demonstração:
+![Demonstração do Assistente Virtual](./documentos/assets/print.png)

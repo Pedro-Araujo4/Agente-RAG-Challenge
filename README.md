@@ -83,4 +83,4 @@ python -m streamlit run app.py
 ## 🌐 Aplicação em Produção (OCI)
 
 ### Acesse a aplicação rodando ao vivo na Oracle Cloud Infrastructure:
-### 👉 **[http://x.x.x.x:8501](//x.x.x.x:8501)**
+### 👉 **[http://163.176.222.199:8501/](http://163.176.222.199:8501/)**
